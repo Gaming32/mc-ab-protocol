@@ -62,18 +62,20 @@ public class WorldChunk {
     }
 
     public static enum BlockType {
-        AIR(0), // 0
-        STONE(1), // 1
-        DIRT(10), // 2
-        GRASS(9), // 3
-        WOOD(77), // 4
-        PLANKS(15), // 5
-        LEAVES(155); // 6
+        AIR(0, 0), // 0
+        STONE(1, 1), // 1
+        DIRT(10, 15), // 2
+        GRASS(9, 14), // 3
+        WOOD(77, 101), // 4
+        PLANKS(15, 22), // 5
+        LEAVES(155, 133); // 6
 
         public final int minecraftID;
+        public final int minecraftItemID;
 
-        BlockType(int minecraftID) {
+        BlockType(int minecraftID, int minecraftItemID) {
             this.minecraftID = minecraftID;
+            this.minecraftItemID = minecraftItemID;
         }
     }
 }

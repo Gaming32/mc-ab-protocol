@@ -19,20 +19,24 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.ThreadLocalRandom;
 
 import com.github.steveice10.mc.protocol.MinecraftProtocol;
 import com.github.steveice10.mc.protocol.data.SubProtocol;
 import com.github.steveice10.mc.protocol.data.game.chunk.Chunk;
 import com.github.steveice10.mc.protocol.data.game.chunk.Column;
+import com.github.steveice10.mc.protocol.data.game.entity.metadata.ItemStack;
 import com.github.steveice10.mc.protocol.data.game.entity.metadata.Position;
 import com.github.steveice10.mc.protocol.data.game.entity.player.PlayerAction;
 import com.github.steveice10.mc.protocol.data.game.world.block.BlockChangeRecord;
 import com.github.steveice10.mc.protocol.packet.ingame.client.ClientChatPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.client.player.ClientPlayerActionPacket;
+import com.github.steveice10.mc.protocol.packet.ingame.client.player.ClientPlayerChangeHeldItemPacket;
+import com.github.steveice10.mc.protocol.packet.ingame.client.player.ClientPlayerPlaceBlockPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.client.player.ClientPlayerPositionRotationPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.ServerChatPacket;
+import com.github.steveice10.mc.protocol.packet.ingame.server.entity.player.ServerPlayerChangeHeldItemPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.entity.player.ServerPlayerPositionRotationPacket;
+import com.github.steveice10.mc.protocol.packet.ingame.server.window.ServerSetSlotPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.world.ServerBlockChangePacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.world.ServerChunkDataPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.world.ServerUnloadChunkPacket;
@@ -71,6 +75,7 @@ public class GameClient extends SessionAdapter {
     protected UUID uuid;
 
     protected float yaw, pitch;
+    protected BlockType curItem = BlockType.STONE;
 
     public GameClient(ProxyServer server, ServerManager manager, Session session, MinecraftProtocol protocol) {
         this.server = server;
@@ -120,6 +125,29 @@ public class GameClient extends SessionAdapter {
                 ClientPlayerActionPacket packet = (ClientPlayerActionPacket)p;
                 if (packet.getAction() != PlayerAction.START_DIGGING) return;
                 updateBlock(packet.getPosition(), BlockType.AIR);
+            } else if (p instanceof ClientPlayerChangeHeldItemPacket) {
+                ClientPlayerChangeHeldItemPacket packet = (ClientPlayerChangeHeldItemPacket)p;
+                switch (packet.getSlot()) {
+                    case 0: curItem = BlockType.STONE; break;
+                    case 1: curItem = BlockType.DIRT; break;
+                    case 2: curItem = BlockType.GRASS; break;
+                    case 3: curItem = BlockType.WOOD; break;
+                    case 4: curItem = BlockType.PLANKS; break;
+                    case 5: curItem = BlockType.LEAVES; break;
+                    case 8: {
+                        curItem = BlockType.LEAVES;
+                        ServerPlayerChangeHeldItemPacket resp = new ServerPlayerChangeHeldItemPacket(5);
+                        session.send(resp);
+                    } break;
+                    default: {
+                        curItem = BlockType.STONE;
+                        ServerPlayerChangeHeldItemPacket resp = new ServerPlayerChangeHeldItemPacket(0);
+                        session.send(resp);
+                    } break;
+                }
+            } else if (p instanceof ClientPlayerPlaceBlockPacket) {
+                ClientPlayerPlaceBlockPacket packet = (ClientPlayerPlaceBlockPacket)p;
+                updateBlock(packet.getPosition(), curItem);
             }
         }
     }
@@ -222,6 +250,12 @@ public class GameClient extends SessionAdapter {
             output = socket.getOutputStream();
             if (!handshake()) return;
             System.out.println("Connected to server");
+            session.send(new ServerSetSlotPacket(0, 0, 36, new ItemStack(BlockType.STONE.minecraftItemID)));
+            session.send(new ServerSetSlotPacket(0, 0, 37, new ItemStack(BlockType.DIRT.minecraftItemID)));
+            session.send(new ServerSetSlotPacket(0, 0, 38, new ItemStack(BlockType.GRASS.minecraftItemID)));
+            session.send(new ServerSetSlotPacket(0, 0, 39, new ItemStack(BlockType.WOOD.minecraftItemID)));
+            session.send(new ServerSetSlotPacket(0, 0, 40, new ItemStack(BlockType.PLANKS.minecraftItemID)));
+            session.send(new ServerSetSlotPacket(0, 0, 41, new ItemStack(BlockType.LEAVES.minecraftItemID)));
             manager.connectedClients.put(session, GameClient.this);
             new SendPacketsThread().start();
             while (true) {
@@ -236,7 +270,7 @@ public class GameClient extends SessionAdapter {
                 } else if (p instanceof PlayerPositionPacket) {
                     PlayerPositionPacket packet = (PlayerPositionPacket)p;
                     ServerPlayerPositionRotationPacket mcPacket = new ServerPlayerPositionRotationPacket(
-                        packet.x + 0.5, packet.y, 1.5, yaw, pitch, ThreadLocalRandom.current().nextInt(), false
+                        packet.x + 0.5, packet.y, 1.5, yaw, pitch, 0, false
                     );
                     session.send(mcPacket);
                 } else if (p instanceof ChatPacket) {

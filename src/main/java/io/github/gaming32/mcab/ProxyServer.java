@@ -56,8 +56,8 @@ public class ProxyServer extends TcpServer {
             session.send(new ServerJoinGamePacket(
                 0,
                 false,
-                GameMode.SURVIVAL,
-                GameMode.SURVIVAL,
+                GameMode.CREATIVE,
+                GameMode.CREATIVE,
                 1,
                 new String[] {"minecraft:world"},
                 getDimensionTag(),

@@ -8,10 +8,12 @@ public class ServerInfoPacket extends Packet {
     public boolean offline;
     public byte[] publicKey;
 
-    public ServerInfoPacket() {}
+    public ServerInfoPacket() {
+        TYPE = PacketType.SERVER_INFO;
+    }
 
     public ServerInfoPacket(boolean offline, byte[] publicKey) {
-        TYPE = PacketType.SERVER_INFO;
+        this();
         this.offline = offline;
         this.publicKey = publicKey;
     }

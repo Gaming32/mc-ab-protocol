@@ -10,10 +10,12 @@ public class PlayerInfoPacket extends Packet {
     public UUID uuid;
     public String name;
 
-    public PlayerInfoPacket() {}
+    public PlayerInfoPacket() {
+        TYPE = PacketType.PLAYER_INFO;
+    }
 
     public PlayerInfoPacket(UUID uuid, String name) {
-        TYPE = PacketType.PLAYER_INFO;
+        this();
         this.uuid = uuid;
         this.name = name;
     }

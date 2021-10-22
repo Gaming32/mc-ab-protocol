@@ -1,6 +1,6 @@
 package io.github.gaming32.mcab;
 
-import java.util.HashMap;
+import java.util.Hashtable;
 import java.util.Map;
 
 import com.github.steveice10.mc.protocol.MinecraftProtocol;
@@ -19,7 +19,7 @@ public class ServerManager extends ServerAdapter {
 
     public ServerManager() {
         // manager = new GameClientManager();
-        connectedClients = new HashMap<>();
+        connectedClients = new Hashtable<>();
     }
 
     @Override

@@ -7,10 +7,12 @@ import java.io.OutputStream;
 public class DisconnectPacket extends Packet {
     public String reason;
 
-    public DisconnectPacket() {}
+    public DisconnectPacket() {
+        TYPE = PacketType.DISCONNECT;
+    }
 
     public DisconnectPacket(String reason) {
-        TYPE = PacketType.DISCONNECT;
+        this();
         this.reason = reason;
     }
 

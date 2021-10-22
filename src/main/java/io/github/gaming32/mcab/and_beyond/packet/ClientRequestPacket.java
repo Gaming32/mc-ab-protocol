@@ -7,16 +7,18 @@ import java.io.OutputStream;
 public class ClientRequestPacket extends Packet {
     public int protocolVersion;
 
-    public ClientRequestPacket() {}
+    public ClientRequestPacket() {
+        TYPE = PacketType.CLIENT_REQUEST;
+    }
 
     public ClientRequestPacket(int protocolVersion) {
-        TYPE = PacketType.CLIENT_REQUEST;
+        this();
         this.protocolVersion = protocolVersion;
     }
 
     @Override
     public void read(InputStream input) throws IOException {
-        protocolVersion = readVarint(input);
+        protocolVersion = (int)readVarint(input);
     }
 
     @Override

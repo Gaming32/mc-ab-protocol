@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
@@ -15,13 +16,13 @@ public abstract class Packet {
         PLAYER_INFO(PlayerInfoPacket.class), // 3
         REMOVE_PLAYER(null), // 4
         DISCONNECT(DisconnectPacket.class), // 5
-        PING(null), // 6
-        CHUNK(null), // 7
-        CHUNK_UNLOAD(null), // 8
-        CHUNK_UPDATE(null), // 9
-        PLAYER_POS(null), // 10
-        ADD_VALOCITY(null), // 11
-        CHAT(null); // 12
+        PING(PingPacket.class), // 6
+        CHUNK(ChunkPacket.class), // 7
+        CHUNK_UNLOAD(UnloadChunkPacket.class), // 8
+        CHUNK_UPDATE(ChunkUpdatePacket.class), // 9
+        PLAYER_POS(PlayerPositionPacket.class), // 10
+        ADD_VELOCITY(AddVelocityPacket.class), // 11
+        CHAT(ChatPacket.class); // 12
 
         public final Class<? extends Packet> packetClass;
 
@@ -36,6 +37,9 @@ public abstract class Packet {
 
     public static Packet readPacket(InputStream input) throws IOException, InstantiationException, IllegalAccessException {
         int packetType = readUshort(input);
+        if (packetType < 0) {
+            return null;
+        }
         Packet packet = PacketType.values()[packetType].packetClass.newInstance();
         packet.read(input);
         return packet;
@@ -51,7 +55,7 @@ public abstract class Packet {
         return input.read() + (input.read() << 8);
     }
 
-    protected static int readVarint(InputStream input) throws IOException {
+    protected static long readVarint(InputStream input) throws IOException {
         int r = 0, i = 0, e;
         while (true) {
             e = input.read();
@@ -66,7 +70,7 @@ public abstract class Packet {
     }
 
     protected static byte[] readBinary(InputStream input) throws IOException {
-        byte[] buffer = new byte[readVarint(input)];
+        byte[] buffer = new byte[(int)readVarint(input)];
         input.read(buffer);
         return buffer;
     }
@@ -88,6 +92,14 @@ public abstract class Packet {
         return new UUID(high, low);
     }
 
+    protected static double readDouble(InputStream input) throws IOException {
+        byte[] buffer = new byte[8];
+        input.read(buffer);
+        ByteBuffer bb = ByteBuffer.wrap(buffer);
+        bb.order(ByteOrder.LITTLE_ENDIAN);
+        return bb.getDouble();
+    }
+
     // Data writers
     protected static void writeUshort(int value, OutputStream output) throws IOException {
         int head = value >> 8;
@@ -95,10 +107,10 @@ public abstract class Packet {
         output.write(head);
     }
 
-    protected static void writeVarint(int value, OutputStream output) throws IOException {
+    protected static void writeVarint(long value, OutputStream output) throws IOException {
         int b;
         while (true) {
-            b = value & 0x7f;
+            b = (int)(value & 0x7f);
             value >>= 7;
             if ((value == 0 && (b & 0x40) == 0) || (value == -1 && (b & 0x40) != 0)) {
                 output.write(b);
@@ -125,6 +137,13 @@ public abstract class Packet {
         ByteBuffer bb = ByteBuffer.wrap(new byte[16]);
         bb.putLong(value.getMostSignificantBits());
         bb.putLong(value.getLeastSignificantBits());
+        output.write(bb.array());
+    }
+
+    protected static void writeDouble(double value, OutputStream output) throws IOException {
+        ByteBuffer bb = ByteBuffer.wrap(new byte[8]);
+        bb.order(ByteOrder.LITTLE_ENDIAN);
+        bb.putDouble(value);
         output.write(bb.array());
     }
 }

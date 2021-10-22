@@ -18,6 +18,10 @@ public class ChatPacket extends Packet {
         this.time = time;
     }
 
+    public ChatPacket(String message) {
+        this(message, System.currentTimeMillis() / 1000D);
+    }
+
     @Override
     public void read(InputStream input) throws IOException {
         message = readString(input);

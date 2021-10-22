@@ -17,15 +17,25 @@ import java.util.Arrays;
 import java.util.Hashtable;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.BlockingDeque;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ThreadLocalRandom;
 
 import com.github.steveice10.mc.protocol.MinecraftProtocol;
 import com.github.steveice10.mc.protocol.data.SubProtocol;
 import com.github.steveice10.mc.protocol.data.game.chunk.Chunk;
 import com.github.steveice10.mc.protocol.data.game.chunk.Column;
+import com.github.steveice10.mc.protocol.data.game.entity.metadata.Position;
+import com.github.steveice10.mc.protocol.data.game.entity.player.PlayerAction;
+import com.github.steveice10.mc.protocol.data.game.world.block.BlockChangeRecord;
+import com.github.steveice10.mc.protocol.packet.ingame.client.ClientChatPacket;
+import com.github.steveice10.mc.protocol.packet.ingame.client.player.ClientPlayerActionPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.client.player.ClientPlayerPositionRotationPacket;
+import com.github.steveice10.mc.protocol.packet.ingame.server.ServerChatPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.entity.player.ServerPlayerPositionRotationPacket;
+import com.github.steveice10.mc.protocol.packet.ingame.server.world.ServerBlockChangePacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.world.ServerChunkDataPacket;
+import com.github.steveice10.mc.protocol.packet.ingame.server.world.ServerUnloadChunkPacket;
 import com.github.steveice10.mc.protocol.packet.login.client.LoginStartPacket;
 import com.github.steveice10.opennbt.tag.builtin.CompoundTag;
 import com.github.steveice10.packetlib.Session;
@@ -33,13 +43,18 @@ import com.github.steveice10.packetlib.event.session.PacketReceivedEvent;
 import com.github.steveice10.packetlib.event.session.SessionAdapter;
 
 import io.github.gaming32.mcab.and_beyond.WorldChunk;
+import io.github.gaming32.mcab.and_beyond.WorldChunk.BlockType;
 import io.github.gaming32.mcab.and_beyond.packet.BasicAuthPacket;
+import io.github.gaming32.mcab.and_beyond.packet.ChatPacket;
 import io.github.gaming32.mcab.and_beyond.packet.ChunkPacket;
+import io.github.gaming32.mcab.and_beyond.packet.ChunkUpdatePacket;
 import io.github.gaming32.mcab.and_beyond.packet.ClientRequestPacket;
 import io.github.gaming32.mcab.and_beyond.packet.Packet;
 import io.github.gaming32.mcab.and_beyond.packet.PlayerInfoPacket;
 import io.github.gaming32.mcab.and_beyond.packet.PlayerPositionPacket;
 import io.github.gaming32.mcab.and_beyond.packet.ServerInfoPacket;
+import io.github.gaming32.mcab.and_beyond.packet.UnloadChunkPacket;
+import net.kyori.adventure.text.Component;
 
 public class GameClient extends SessionAdapter {
     protected final int BARRIER_BLOCK = 7754;
@@ -51,6 +66,7 @@ public class GameClient extends SessionAdapter {
     protected final ConnectionThread thread;
     protected final Map<Vector2Int, WorldChunk> loadedChunks;
     protected final Map<Long, Column> loadedColumns;
+    protected final BlockingDeque<Packet> packetsToSend;
     protected String username;
     protected UUID uuid;
 
@@ -64,6 +80,7 @@ public class GameClient extends SessionAdapter {
         this.thread = new ConnectionThread();
         this.loadedChunks = new Hashtable<>();
         this.loadedColumns = new Hashtable<>();
+        this.packetsToSend = new LinkedBlockingDeque<>();
     }
 
     public void start() {
@@ -91,6 +108,57 @@ public class GameClient extends SessionAdapter {
                 yaw = packet.getYaw();
                 pitch = packet.getPitch();
             }
+            else if (p instanceof ClientChatPacket) {
+                ClientChatPacket packet = (ClientChatPacket)p;
+                ChatPacket abPacket = new ChatPacket(packet.getMessage());
+                try {
+                    packetsToSend.putLast(abPacket);
+                } catch (InterruptedException e1) {
+                    e1.printStackTrace();
+                }
+            } else if (p instanceof ClientPlayerActionPacket) {
+                ClientPlayerActionPacket packet = (ClientPlayerActionPacket)p;
+                if (packet.getAction() != PlayerAction.START_DIGGING) return;
+                updateBlock(packet.getPosition(), BlockType.AIR);
+            }
+        }
+    }
+
+    protected void updateBlock(Position where, BlockType block) {
+        int z = where.getZ();
+        if (z != 1) {
+            if (z == 0 || z == 2) {
+                ServerBlockChangePacket response = new ServerBlockChangePacket(
+                    new BlockChangeRecord(where, BARRIER_BLOCK)
+                );
+                session.send(response);
+            }
+            return;
+        }
+        int x = where.getX();
+        int y = where.getY();
+        long cx = x >> 4;
+        long cy = y >> 4;
+        int bx = (int)(x - (cx << 4));
+        int by = (int)(y - (cy << 4));
+        WorldChunk chunk;
+        if ((chunk = loadedChunks.get(new Vector2Int(cx, cy))) != null) {
+            chunk.setTileType(bx, by, block);
+        }
+        if (cy > -128 && cy < 125) {
+            Column column;
+            if ((column = loadedColumns.get(cx)) != null) {
+                Chunk mcChunk = column.getChunks()[(int)cy + 127];
+                if (mcChunk != null) {
+                    mcChunk.set(bx, by, 1, block.minecraftID);
+                }
+            }
+        }
+        ChunkUpdatePacket abPacket = new ChunkUpdatePacket(cx, cy, bx, by, block);
+        try {
+            packetsToSend.putLast(abPacket);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
     }
 
@@ -115,7 +183,7 @@ public class GameClient extends SessionAdapter {
                 minecraftChunk.set(x, y, 2, BARRIER_BLOCK);
             }
         }
-        if (chunk.absY > -127 && chunk.absY < 126) {
+        if (chunk.absY > -128 && chunk.absY < 125) {
             column.getChunks()[(int)chunk.absY + 127] = minecraftChunk;
         }
         return minecraftChunk;
@@ -155,6 +223,7 @@ public class GameClient extends SessionAdapter {
             if (!handshake()) return;
             System.out.println("Connected to server");
             manager.connectedClients.put(session, GameClient.this);
+            new SendPacketsThread().start();
             while (true) {
                 Packet p = Packet.readPacket(input);
                 if (p == null) break;
@@ -170,6 +239,42 @@ public class GameClient extends SessionAdapter {
                         packet.x + 0.5, packet.y, 1.5, yaw, pitch, ThreadLocalRandom.current().nextInt(), false
                     );
                     session.send(mcPacket);
+                } else if (p instanceof ChatPacket) {
+                    ChatPacket packet = (ChatPacket)p;
+                    ServerChatPacket mcPacket = new ServerChatPacket(Component.text(packet.message));
+                    session.send(mcPacket);
+                } else if (p instanceof ChunkUpdatePacket) {
+                    ChunkUpdatePacket packet = (ChunkUpdatePacket)p;
+                    int x = (int)(packet.cx << 4) + packet.bx;
+                    int y = (int)(packet.cy << 4) + packet.by;
+                    ServerBlockChangePacket mcPacket = new ServerBlockChangePacket(
+                        new BlockChangeRecord(new Position(x, y, 1), packet.block.minecraftID)
+                    );
+                    session.send(mcPacket);
+                } else if (p instanceof UnloadChunkPacket) {
+                    UnloadChunkPacket packet = (UnloadChunkPacket)p;
+                    Vector2Int pos = new Vector2Int(packet.x, packet.y);
+                    loadedChunks.remove(pos);
+                    if (packet.y > -128 && packet.y < 125) {
+                        Column column;
+                        if ((column = loadedColumns.get(packet.x)) != null) {
+                            column.getChunks()[(int)packet.y + 127] = null;
+                            boolean empty = true;
+                            for (Chunk mcChunk : column.getChunks()) {
+                                if (mcChunk != null) {
+                                    empty = false;
+                                    break;
+                                }
+                            }
+                            if (empty) {
+                                loadedColumns.remove(packet.x);
+                                ServerUnloadChunkPacket mcPacket = new ServerUnloadChunkPacket((int)packet.x, 1);
+                                session.send(mcPacket);
+                            } else {
+                                resendColumn(column);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -249,6 +354,31 @@ public class GameClient extends SessionAdapter {
 
         protected void shutdown() {
 
+        }
+
+        protected class SendPacketsThread extends Thread {
+            public SendPacketsThread() {
+                super("SendPacketsThread-" + session.getRemoteAddress());
+            }
+
+            public void run() {
+                Packet packet;
+                while (true) {
+                    try {
+                        packet = packetsToSend.takeFirst();
+                    } catch (InterruptedException e1) {
+                        e1.printStackTrace();
+                        break;
+                    }
+                    synchronized (output) {
+                        try {
+                            Packet.writePacket(packet, output);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }
         }
     }
 }

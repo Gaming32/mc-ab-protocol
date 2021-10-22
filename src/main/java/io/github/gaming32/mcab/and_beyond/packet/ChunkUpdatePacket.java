@@ -21,6 +21,7 @@ public class ChunkUpdatePacket extends Packet {
         this.cy = cy;
         this.bx = bx;
         this.by = by;
+        this.block = block;
     }
 
     @Override

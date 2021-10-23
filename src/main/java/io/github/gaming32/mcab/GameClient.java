@@ -27,13 +27,17 @@ import com.github.steveice10.mc.protocol.data.game.chunk.Column;
 import com.github.steveice10.mc.protocol.data.game.entity.metadata.ItemStack;
 import com.github.steveice10.mc.protocol.data.game.entity.metadata.Position;
 import com.github.steveice10.mc.protocol.data.game.entity.player.PlayerAction;
+import com.github.steveice10.mc.protocol.data.game.entity.player.PositionElement;
 import com.github.steveice10.mc.protocol.data.game.world.block.BlockChangeRecord;
+import com.github.steveice10.mc.protocol.data.game.world.block.BlockFace;
 import com.github.steveice10.mc.protocol.packet.ingame.client.ClientChatPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.client.player.ClientPlayerActionPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.client.player.ClientPlayerChangeHeldItemPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.client.player.ClientPlayerPlaceBlockPacket;
+import com.github.steveice10.mc.protocol.packet.ingame.client.player.ClientPlayerPositionPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.client.player.ClientPlayerPositionRotationPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.ServerChatPacket;
+import com.github.steveice10.mc.protocol.packet.ingame.server.ServerDisconnectPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.entity.player.ServerPlayerChangeHeldItemPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.entity.player.ServerPlayerPositionRotationPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.window.ServerSetSlotPacket;
@@ -48,11 +52,13 @@ import com.github.steveice10.packetlib.event.session.SessionAdapter;
 
 import io.github.gaming32.mcab.and_beyond.WorldChunk;
 import io.github.gaming32.mcab.and_beyond.WorldChunk.BlockType;
+import io.github.gaming32.mcab.and_beyond.packet.AddVelocityPacket;
 import io.github.gaming32.mcab.and_beyond.packet.BasicAuthPacket;
 import io.github.gaming32.mcab.and_beyond.packet.ChatPacket;
 import io.github.gaming32.mcab.and_beyond.packet.ChunkPacket;
 import io.github.gaming32.mcab.and_beyond.packet.ChunkUpdatePacket;
 import io.github.gaming32.mcab.and_beyond.packet.ClientRequestPacket;
+import io.github.gaming32.mcab.and_beyond.packet.DisconnectPacket;
 import io.github.gaming32.mcab.and_beyond.packet.Packet;
 import io.github.gaming32.mcab.and_beyond.packet.PlayerInfoPacket;
 import io.github.gaming32.mcab.and_beyond.packet.PlayerPositionPacket;
@@ -74,7 +80,8 @@ public class GameClient extends SessionAdapter {
     protected String username;
     protected UUID uuid;
 
-    protected float yaw, pitch;
+    protected double x, y, z = 1.5;
+    protected float yaw, pitch = 90;
     protected BlockType curItem = BlockType.STONE;
 
     public GameClient(ProxyServer server, ServerManager manager, Session session, MinecraftProtocol protocol) {
@@ -110,10 +117,37 @@ public class GameClient extends SessionAdapter {
             com.github.steveice10.packetlib.packet.Packet p = e.getPacket();
             if (p instanceof ClientPlayerPositionRotationPacket) {
                 ClientPlayerPositionRotationPacket packet = (ClientPlayerPositionRotationPacket)p;
+                double xOffset = packet.getX() - x, yOffset = packet.getY() - y;
+                if (yOffset < 0) {
+                    yOffset = 0;
+                }
+                x += xOffset;
+                y += yOffset;
+                // z = packet.getZ();
                 yaw = packet.getYaw();
                 pitch = packet.getPitch();
-            }
-            else if (p instanceof ClientChatPacket) {
+                AddVelocityPacket abPacket = new AddVelocityPacket(xOffset * 5, yOffset * 2.5);
+                try {
+                    packetsToSend.putLast(abPacket);
+                } catch (InterruptedException e1) {
+                    e1.printStackTrace();
+                }
+            } else if (p instanceof ClientPlayerPositionPacket) {
+                ClientPlayerPositionPacket packet = (ClientPlayerPositionPacket)p;
+                double xOffset = packet.getX() - x, yOffset = packet.getY() - y;
+                if (yOffset < 0) {
+                    yOffset = 0;
+                }
+                x += xOffset;
+                y += yOffset;
+                // z = packet.getZ();
+                AddVelocityPacket abPacket = new AddVelocityPacket(xOffset * 5, yOffset * 2.5);
+                try {
+                    packetsToSend.putLast(abPacket);
+                } catch (InterruptedException e1) {
+                    e1.printStackTrace();
+                }
+            } else if (p instanceof ClientChatPacket) {
                 ClientChatPacket packet = (ClientChatPacket)p;
                 ChatPacket abPacket = new ChatPacket(packet.getMessage());
                 try {
@@ -147,15 +181,40 @@ public class GameClient extends SessionAdapter {
                 }
             } else if (p instanceof ClientPlayerPlaceBlockPacket) {
                 ClientPlayerPlaceBlockPacket packet = (ClientPlayerPlaceBlockPacket)p;
-                updateBlock(packet.getPosition(), curItem);
+                Position pos = addFaceToPosition(packet.getPosition(), packet.getFace());
+                updateBlock(pos, curItem);
             }
         }
     }
 
+    protected Position addFaceToPosition(Position a, BlockFace b) {
+        return sumOfPositions(a, faceToIdentityPosition(b));
+    }
+
+    protected Position sumOfPositions(Position a, Position b) {
+        return new Position(a.getX() + b.getX(), a.getY() + b.getY(), a.getZ() + b.getZ());
+    }
+
+    protected Position faceToIdentityPosition(BlockFace face) {
+        switch (face) {
+            case UP: return new Position(0, 1, 0);
+            case DOWN: return new Position(0, -1, 0);
+            case SOUTH: return new Position(0, 0, 1);
+            case NORTH: return new Position(0, 0, -1);
+            case EAST: return new Position(1, 0, 0);
+            case WEST: return new Position(-1, 0, 0);
+            default: return null;
+        }
+    }
+
     protected void updateBlock(Position where, BlockType block) {
+        updateBlock(where, block, true);
+    }
+
+    protected void updateBlock(Position where, BlockType block, boolean send) {
         int z = where.getZ();
         if (z != 1) {
-            if (z == 0 || z == 2) {
+            if (send && (z == 0 || z == 2)) {
                 ServerBlockChangePacket response = new ServerBlockChangePacket(
                     new BlockChangeRecord(where, BARRIER_BLOCK)
                 );
@@ -182,11 +241,13 @@ public class GameClient extends SessionAdapter {
                 }
             }
         }
-        ChunkUpdatePacket abPacket = new ChunkUpdatePacket(cx, cy, bx, by, block);
-        try {
-            packetsToSend.putLast(abPacket);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+        if (send) {
+            ChunkUpdatePacket abPacket = new ChunkUpdatePacket(cx, cy, bx, by, block);
+            try {
+                packetsToSend.putLast(abPacket);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
     }
 
@@ -269,8 +330,10 @@ public class GameClient extends SessionAdapter {
                     resendColumn(column);
                 } else if (p instanceof PlayerPositionPacket) {
                     PlayerPositionPacket packet = (PlayerPositionPacket)p;
+                    x = packet.x + 0.5;
+                    y = packet.y;
                     ServerPlayerPositionRotationPacket mcPacket = new ServerPlayerPositionRotationPacket(
-                        packet.x + 0.5, packet.y, 1.5, yaw, pitch, 0, false
+                        x, y, z, 0, 0, 0, false, PositionElement.YAW, PositionElement.PITCH
                     );
                     session.send(mcPacket);
                 } else if (p instanceof ChatPacket) {
@@ -281,6 +344,7 @@ public class GameClient extends SessionAdapter {
                     ChunkUpdatePacket packet = (ChunkUpdatePacket)p;
                     int x = (int)(packet.cx << 4) + packet.bx;
                     int y = (int)(packet.cy << 4) + packet.by;
+                    updateBlock(new Position(x, y, 1), packet.block, false);
                     ServerBlockChangePacket mcPacket = new ServerBlockChangePacket(
                         new BlockChangeRecord(new Position(x, y, 1), packet.block.minecraftID)
                     );
@@ -309,6 +373,10 @@ public class GameClient extends SessionAdapter {
                             }
                         }
                     }
+                } else if (p instanceof DisconnectPacket) {
+                    DisconnectPacket packet = (DisconnectPacket)p;
+                    ServerDisconnectPacket mcPacket = new ServerDisconnectPacket(Component.text(packet.reason));
+                    session.send(mcPacket);
                 }
             }
         }

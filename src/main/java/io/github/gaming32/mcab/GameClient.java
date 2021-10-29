@@ -52,7 +52,7 @@ import com.github.steveice10.packetlib.event.session.SessionAdapter;
 
 import io.github.gaming32.mcab.and_beyond.WorldChunk;
 import io.github.gaming32.mcab.and_beyond.WorldChunk.BlockType;
-import io.github.gaming32.mcab.and_beyond.packet.AddVelocityPacket;
+import io.github.gaming32.mcab.and_beyond.packet.SimplePlayerPositionPacket;
 import io.github.gaming32.mcab.and_beyond.packet.BasicAuthPacket;
 import io.github.gaming32.mcab.and_beyond.packet.ChatPacket;
 import io.github.gaming32.mcab.and_beyond.packet.ChunkPacket;
@@ -117,16 +117,11 @@ public class GameClient extends SessionAdapter {
             com.github.steveice10.packetlib.packet.Packet p = e.getPacket();
             if (p instanceof ClientPlayerPositionRotationPacket) {
                 ClientPlayerPositionRotationPacket packet = (ClientPlayerPositionRotationPacket)p;
-                double xOffset = packet.getX() - x, yOffset = packet.getY() - y;
-                if (yOffset < 0) {
-                    yOffset = 0;
-                }
-                x += xOffset;
-                y += yOffset;
-                // z = packet.getZ();
+                x = packet.getX();
+                y = packet.getY();
                 yaw = packet.getYaw();
                 pitch = packet.getPitch();
-                AddVelocityPacket abPacket = new AddVelocityPacket(xOffset * 5, yOffset * 2.5);
+                SimplePlayerPositionPacket abPacket = new SimplePlayerPositionPacket(x - 0.5, y);
                 try {
                     packetsToSend.putLast(abPacket);
                 } catch (InterruptedException e1) {
@@ -134,14 +129,9 @@ public class GameClient extends SessionAdapter {
                 }
             } else if (p instanceof ClientPlayerPositionPacket) {
                 ClientPlayerPositionPacket packet = (ClientPlayerPositionPacket)p;
-                double xOffset = packet.getX() - x, yOffset = packet.getY() - y;
-                if (yOffset < 0) {
-                    yOffset = 0;
-                }
-                x += xOffset;
-                y += yOffset;
-                // z = packet.getZ();
-                AddVelocityPacket abPacket = new AddVelocityPacket(xOffset * 5, yOffset * 2.5);
+                x = packet.getX();
+                y = packet.getY();
+                SimplePlayerPositionPacket abPacket = new SimplePlayerPositionPacket(x - 0.5, y);
                 try {
                     packetsToSend.putLast(abPacket);
                 } catch (InterruptedException e1) {
@@ -330,6 +320,16 @@ public class GameClient extends SessionAdapter {
                     resendColumn(column);
                 } else if (p instanceof PlayerPositionPacket) {
                     PlayerPositionPacket packet = (PlayerPositionPacket)p;
+                    if (packet.player.equals(uuid)) {
+                        x = packet.x + 0.5;
+                        y = packet.y;
+                        ServerPlayerPositionRotationPacket mcPacket = new ServerPlayerPositionRotationPacket(
+                            x, y, z, 0, 0, 0, false, PositionElement.YAW, PositionElement.PITCH
+                        );
+                        session.send(mcPacket);
+                    }
+                } else if (p instanceof SimplePlayerPositionPacket) {
+                    SimplePlayerPositionPacket packet = (SimplePlayerPositionPacket)p;
                     x = packet.x + 0.5;
                     y = packet.y;
                     ServerPlayerPositionRotationPacket mcPacket = new ServerPlayerPositionRotationPacket(

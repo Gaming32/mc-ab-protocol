@@ -21,7 +21,7 @@ public abstract class Packet {
         CHUNK_UNLOAD(UnloadChunkPacket.class), // 8
         CHUNK_UPDATE(ChunkUpdatePacket.class), // 9
         PLAYER_POS(PlayerPositionPacket.class), // 10
-        ADD_VELOCITY(AddVelocityPacket.class), // 11
+        SIMPLE_PLAYER_POS(SimplePlayerPositionPacket.class), // 11
         CHAT(ChatPacket.class); // 12
 
         public final Class<? extends Packet> packetClass;

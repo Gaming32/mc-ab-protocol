@@ -32,7 +32,7 @@ public class ProxyServer extends TcpServer {
     public static final String DEST_HOST = "localhost";
     public static final int DEST_PORT = 7932;
     public static final String VERSION_NAME = "a1.3.2";
-    public static final int AB_PROTOCOL_VERSION = 3;
+    public static final int AB_PROTOCOL_VERSION = 4;
     public static final int MC_PROTOCOL_VERSION = 756;
 
     public ProxyServer(String host, int port) {

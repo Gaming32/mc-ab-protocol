@@ -4,14 +4,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-public class AddVelocityPacket extends Packet {
+public class SimplePlayerPositionPacket extends Packet {
     public double x, y;
 
-    public AddVelocityPacket() {
-        TYPE = PacketType.ADD_VELOCITY;
+    public SimplePlayerPositionPacket() {
+        TYPE = PacketType.SIMPLE_PLAYER_POS;
     }
 
-    public AddVelocityPacket(double x, double y) {
+    public SimplePlayerPositionPacket(double x, double y) {
         this();
         this.x = x;
         this.y = y;

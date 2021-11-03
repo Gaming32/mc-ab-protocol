@@ -20,12 +20,16 @@ import java.util.UUID;
 import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.LinkedBlockingDeque;
 
+import com.github.steveice10.mc.auth.data.GameProfile;
 import com.github.steveice10.mc.protocol.MinecraftProtocol;
 import com.github.steveice10.mc.protocol.data.SubProtocol;
+import com.github.steveice10.mc.protocol.data.game.PlayerListEntry;
+import com.github.steveice10.mc.protocol.data.game.PlayerListEntryAction;
 import com.github.steveice10.mc.protocol.data.game.chunk.Chunk;
 import com.github.steveice10.mc.protocol.data.game.chunk.Column;
 import com.github.steveice10.mc.protocol.data.game.entity.metadata.ItemStack;
 import com.github.steveice10.mc.protocol.data.game.entity.metadata.Position;
+import com.github.steveice10.mc.protocol.data.game.entity.player.GameMode;
 import com.github.steveice10.mc.protocol.data.game.entity.player.PlayerAction;
 import com.github.steveice10.mc.protocol.data.game.entity.player.PositionElement;
 import com.github.steveice10.mc.protocol.data.game.world.block.BlockChangeRecord;
@@ -38,8 +42,10 @@ import com.github.steveice10.mc.protocol.packet.ingame.client.player.ClientPlaye
 import com.github.steveice10.mc.protocol.packet.ingame.client.player.ClientPlayerPositionRotationPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.ServerChatPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.ServerDisconnectPacket;
+import com.github.steveice10.mc.protocol.packet.ingame.server.ServerPlayerListEntryPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.entity.player.ServerPlayerChangeHeldItemPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.entity.player.ServerPlayerPositionRotationPacket;
+import com.github.steveice10.mc.protocol.packet.ingame.server.entity.spawn.ServerSpawnPlayerPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.window.ServerSetSlotPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.world.ServerBlockChangePacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.world.ServerChunkDataPacket;
@@ -62,6 +68,7 @@ import io.github.gaming32.mcab.and_beyond.packet.DisconnectPacket;
 import io.github.gaming32.mcab.and_beyond.packet.Packet;
 import io.github.gaming32.mcab.and_beyond.packet.PlayerInfoPacket;
 import io.github.gaming32.mcab.and_beyond.packet.PlayerPositionPacket;
+import io.github.gaming32.mcab.and_beyond.packet.RemovePlayerPacket;
 import io.github.gaming32.mcab.and_beyond.packet.ServerInfoPacket;
 import io.github.gaming32.mcab.and_beyond.packet.SimplePlayerPositionPacket;
 import io.github.gaming32.mcab.and_beyond.packet.UnloadChunkPacket;
@@ -336,6 +343,12 @@ public class GameClient extends SessionAdapter {
                             x, y, z, 0, 0, 0, false, PositionElement.YAW, PositionElement.PITCH
                         );
                         session.send(mcPacket);
+                    } else {
+                        int eid = manager.getRemotePlayerEntityId(packet.player);
+                        ServerSpawnPlayerPacket mcPacket = new ServerSpawnPlayerPacket(
+                            eid, packet.player, packet.x + 0.5, packet.y, 1, 0, 0
+                        );
+                        session.send(mcPacket);
                     }
                 } else if (p instanceof SimplePlayerPositionPacket) {
                     SimplePlayerPositionPacket packet = (SimplePlayerPositionPacket)p;
@@ -385,6 +398,18 @@ public class GameClient extends SessionAdapter {
                 } else if (p instanceof DisconnectPacket) {
                     DisconnectPacket packet = (DisconnectPacket)p;
                     ServerDisconnectPacket mcPacket = new ServerDisconnectPacket(Component.text(packet.reason));
+                    session.send(mcPacket);
+                } else if (p instanceof PlayerInfoPacket) {
+                    PlayerInfoPacket packet = (PlayerInfoPacket)p;
+                    ServerPlayerListEntryPacket mcPacket = new ServerPlayerListEntryPacket(PlayerListEntryAction.ADD_PLAYER, new PlayerListEntry[] {
+                        new PlayerListEntry(new GameProfile(packet.uuid, packet.name), GameMode.CREATIVE, -1, null)
+                    });
+                    session.send(mcPacket);
+                } else if (p instanceof RemovePlayerPacket) {
+                    RemovePlayerPacket packet = (RemovePlayerPacket)p;
+                    ServerPlayerListEntryPacket mcPacket = new ServerPlayerListEntryPacket(PlayerListEntryAction.REMOVE_PLAYER, new PlayerListEntry[] {
+                        new PlayerListEntry(new GameProfile(packet.player, null))
+                    });
                     session.send(mcPacket);
                 }
             }

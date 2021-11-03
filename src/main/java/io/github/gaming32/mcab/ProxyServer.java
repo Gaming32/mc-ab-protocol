@@ -37,11 +37,14 @@ public class ProxyServer extends TcpServer {
     public static final String VERSION_NAME = "a1.3.2";
     public static final int AB_PROTOCOL_VERSION = 4;
     public static final int MC_PROTOCOL_VERSION = 756;
+    protected final ServerManager serverManager;
 
     public ProxyServer(String host, int port) {
         super(host, port, MinecraftProtocol.class);
         SessionService sessionService = new SessionService();
         sessionService.setProxy(Proxy.NO_PROXY);
+
+        this.serverManager = new ServerManager();
 
         this.setGlobalFlag(MinecraftConstants.SESSION_SERVICE_KEY, sessionService);
         this.setGlobalFlag(MinecraftConstants.VERIFY_USERS_KEY, false);
@@ -95,7 +98,7 @@ public class ProxyServer extends TcpServer {
         });
 
         this.setGlobalFlag(MinecraftConstants.SERVER_COMPRESSION_THRESHOLD, 100);
-        this.addListener(new ServerManager());
+        this.addListener(this.serverManager);
     }
 
     private CompoundTag getDimensionTag() {

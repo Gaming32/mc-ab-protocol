@@ -14,7 +14,7 @@ public abstract class Packet {
         SERVER_INFO(ServerInfoPacket.class), // 1
         BASIC_AUTH(BasicAuthPacket.class), // 2
         PLAYER_INFO(PlayerInfoPacket.class), // 3
-        REMOVE_PLAYER(null), // 4
+        REMOVE_PLAYER(RemovePlayerPacket.class), // 4
         DISCONNECT(DisconnectPacket.class), // 5
         PING(PingPacket.class), // 6
         CHUNK(ChunkPacket.class), // 7

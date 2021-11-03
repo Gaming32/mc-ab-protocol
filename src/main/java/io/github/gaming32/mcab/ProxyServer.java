@@ -8,12 +8,15 @@ import com.github.steveice10.mc.auth.service.SessionService;
 import com.github.steveice10.mc.protocol.MinecraftConstants;
 import com.github.steveice10.mc.protocol.MinecraftProtocol;
 import com.github.steveice10.mc.protocol.ServerLoginHandler;
+import com.github.steveice10.mc.protocol.data.game.entity.Effect;
 import com.github.steveice10.mc.protocol.data.game.entity.player.GameMode;
 import com.github.steveice10.mc.protocol.data.status.PlayerInfo;
 import com.github.steveice10.mc.protocol.data.status.ServerStatusInfo;
 import com.github.steveice10.mc.protocol.data.status.VersionInfo;
 import com.github.steveice10.mc.protocol.data.status.handler.ServerInfoBuilder;
 import com.github.steveice10.mc.protocol.packet.ingame.server.ServerJoinGamePacket;
+import com.github.steveice10.mc.protocol.packet.ingame.server.entity.ServerEntityEffectPacket;
+import com.github.steveice10.mc.protocol.packet.ingame.server.entity.player.ServerPlayerAbilitiesPacket;
 import com.github.steveice10.opennbt.tag.builtin.ByteTag;
 import com.github.steveice10.opennbt.tag.builtin.CompoundTag;
 import com.github.steveice10.opennbt.tag.builtin.FloatTag;
@@ -68,6 +71,24 @@ public class ProxyServer extends TcpServer {
                 8,
                 false,
                 false,
+                false,
+                false
+            ));
+            // No flying
+            session.send(new ServerPlayerAbilitiesPacket(
+                true,
+                false,
+                false,
+                true,
+                0.05F,
+                0.1F
+            ));
+            // Jump Boost III for forever
+            session.send(new ServerEntityEffectPacket(
+                0,
+                Effect.JUMP,
+                2,
+                Integer.MAX_VALUE,
                 false,
                 false
             ));

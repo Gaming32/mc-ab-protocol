@@ -43,6 +43,10 @@ import com.github.steveice10.mc.protocol.packet.ingame.client.player.ClientPlaye
 import com.github.steveice10.mc.protocol.packet.ingame.server.ServerChatPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.ServerDisconnectPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.ServerPlayerListEntryPacket;
+import com.github.steveice10.mc.protocol.packet.ingame.server.entity.ServerEntityHeadLookPacket;
+import com.github.steveice10.mc.protocol.packet.ingame.server.entity.ServerEntityPositionRotationPacket;
+import com.github.steveice10.mc.protocol.packet.ingame.server.entity.ServerEntityTeleportPacket;
+import com.github.steveice10.mc.protocol.packet.ingame.server.entity.ServerRemoveEntitiesPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.entity.player.ServerPlayerChangeHeldItemPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.entity.player.ServerPlayerPositionRotationPacket;
 import com.github.steveice10.mc.protocol.packet.ingame.server.entity.spawn.ServerSpawnPlayerPacket;
@@ -85,6 +89,8 @@ public class GameClient extends SessionAdapter {
     protected final Map<Vector2Int, WorldChunk> loadedChunks;
     protected final Map<Long, Column> loadedColumns;
     protected final BlockingDeque<Packet> packetsToSend;
+    protected final Map<UUID, RemotePlayer> remotePlayers;
+    protected int nextRemotePlayerEntityId = 1;
     protected String username;
     protected UUID uuid;
 
@@ -101,6 +107,7 @@ public class GameClient extends SessionAdapter {
         this.loadedChunks = new Hashtable<>();
         this.loadedColumns = new Hashtable<>();
         this.packetsToSend = new LinkedBlockingDeque<>();
+        this.remotePlayers = new Hashtable<>();
     }
 
     public void start() {
@@ -344,11 +351,37 @@ public class GameClient extends SessionAdapter {
                         );
                         session.send(mcPacket);
                     } else {
-                        int eid = manager.getRemotePlayerEntityId(packet.player);
-                        ServerSpawnPlayerPacket mcPacket = new ServerSpawnPlayerPacket(
-                            eid, packet.player, packet.x + 0.5, packet.y, 1, 0, 0
-                        );
-                        session.send(mcPacket);
+                        RemotePlayer remote = remotePlayers.get(packet.player);
+                        if (remote == null) {
+                            remote = new RemotePlayer(nextRemotePlayerEntityId++, packet.x, packet.y);
+                            remotePlayers.put(packet.player, remote);
+                            ServerSpawnPlayerPacket mcPacket = new ServerSpawnPlayerPacket(
+                                remote.enitityId, packet.player, packet.x + 0.5, packet.y, 1.5, 0, 0
+                            );
+                            session.send(mcPacket);
+                        } else {
+                            double dx = packet.x - remote.x,
+                                   dy = packet.y - remote.y;
+                            float yaw = dx == 0 ? 0 : (dx > 0 ? -90 : 90);
+                            remote.x = packet.x;
+                            remote.y = packet.y;
+                            remote.yaw = yaw;
+                            if (dx > 8.0 || dy > 8.0) {
+                                ServerEntityTeleportPacket mcPacket = new ServerEntityTeleportPacket(
+                                    remote.enitityId, packet.x + 0.5, packet.y, 1.5, 0, 0, true
+                                );
+                                session.send(mcPacket);
+                            } else {
+                                ServerEntityPositionRotationPacket mcPacket1 = new ServerEntityPositionRotationPacket(
+                                    remote.enitityId, dx, dy, 0, yaw, 0, true
+                                );
+                                session.send(mcPacket1);
+                                ServerEntityHeadLookPacket mcPacket2 = new ServerEntityHeadLookPacket(
+                                    remote.enitityId, yaw
+                                );
+                                session.send(mcPacket2);
+                            }
+                        }
                     }
                 } else if (p instanceof SimplePlayerPositionPacket) {
                     SimplePlayerPositionPacket packet = (SimplePlayerPositionPacket)p;
@@ -407,10 +440,17 @@ public class GameClient extends SessionAdapter {
                     session.send(mcPacket);
                 } else if (p instanceof RemovePlayerPacket) {
                     RemovePlayerPacket packet = (RemovePlayerPacket)p;
-                    ServerPlayerListEntryPacket mcPacket = new ServerPlayerListEntryPacket(PlayerListEntryAction.REMOVE_PLAYER, new PlayerListEntry[] {
+                    ServerPlayerListEntryPacket mcPacket1 = new ServerPlayerListEntryPacket(PlayerListEntryAction.REMOVE_PLAYER, new PlayerListEntry[] {
                         new PlayerListEntry(new GameProfile(packet.player, null))
                     });
-                    session.send(mcPacket);
+                    session.send(mcPacket1);
+                    RemotePlayer remote = remotePlayers.remove(packet.player);
+                    if (remote != null) {
+                        ServerRemoveEntitiesPacket mcPacket2 = new ServerRemoveEntitiesPacket(
+                            new int[] {remote.enitityId}
+                        );
+                        session.send(mcPacket2);
+                    }
                 }
             }
         }

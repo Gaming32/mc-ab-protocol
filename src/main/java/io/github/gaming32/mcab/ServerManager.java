@@ -2,7 +2,6 @@ package io.github.gaming32.mcab;
 
 import java.util.Hashtable;
 import java.util.Map;
-import java.util.UUID;
 
 import com.github.steveice10.mc.protocol.MinecraftProtocol;
 import com.github.steveice10.packetlib.Session;
@@ -14,12 +13,9 @@ import com.github.steveice10.packetlib.event.server.SessionAddedEvent;
 
 public class ServerManager extends ServerAdapter {
     public final Map<Session, GameClient> connectedClients;
-    protected final Map<UUID, Integer> remotePlayers;
-    protected int nextEntityId = 1;
 
     public ServerManager() {
         connectedClients = new Hashtable<>();
-        remotePlayers = new Hashtable<>();
     }
 
     @Override
@@ -41,14 +37,5 @@ public class ServerManager extends ServerAdapter {
     public void sessionAdded(SessionAddedEvent e) {
         MinecraftProtocol proto = (MinecraftProtocol)e.getSession().getPacketProtocol();
         e.getSession().addListener(new GameClient((ProxyServer)e.getServer(), this, e.getSession(), proto));
-    }
-
-    public int getRemotePlayerEntityId(UUID player) {
-        Integer eid = remotePlayers.get(player);
-        if (eid == null) {
-            eid = nextEntityId++;
-            remotePlayers.put(player, eid);
-        }
-        return eid;
     }
 }

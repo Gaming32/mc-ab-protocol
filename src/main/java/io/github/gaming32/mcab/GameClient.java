@@ -47,12 +47,12 @@ import com.github.steveice10.mc.protocol.packet.ingame.server.world.ServerUnload
 import com.github.steveice10.mc.protocol.packet.login.client.LoginStartPacket;
 import com.github.steveice10.opennbt.tag.builtin.CompoundTag;
 import com.github.steveice10.packetlib.Session;
+import com.github.steveice10.packetlib.event.session.DisconnectedEvent;
 import com.github.steveice10.packetlib.event.session.PacketReceivedEvent;
 import com.github.steveice10.packetlib.event.session.SessionAdapter;
 
 import io.github.gaming32.mcab.and_beyond.WorldChunk;
 import io.github.gaming32.mcab.and_beyond.WorldChunk.BlockType;
-import io.github.gaming32.mcab.and_beyond.packet.SimplePlayerPositionPacket;
 import io.github.gaming32.mcab.and_beyond.packet.BasicAuthPacket;
 import io.github.gaming32.mcab.and_beyond.packet.ChatPacket;
 import io.github.gaming32.mcab.and_beyond.packet.ChunkPacket;
@@ -63,6 +63,7 @@ import io.github.gaming32.mcab.and_beyond.packet.Packet;
 import io.github.gaming32.mcab.and_beyond.packet.PlayerInfoPacket;
 import io.github.gaming32.mcab.and_beyond.packet.PlayerPositionPacket;
 import io.github.gaming32.mcab.and_beyond.packet.ServerInfoPacket;
+import io.github.gaming32.mcab.and_beyond.packet.SimplePlayerPositionPacket;
 import io.github.gaming32.mcab.and_beyond.packet.UnloadChunkPacket;
 import net.kyori.adventure.text.Component;
 
@@ -177,6 +178,13 @@ public class GameClient extends SessionAdapter {
         }
     }
 
+    @Override
+    public void disconnected(DisconnectedEvent event) {
+        thread.running = false;
+        manager.connectedClients.remove(event.getSession());
+        System.out.println(event.getSession() + " disconnected: " + event.getReason());
+    }
+
     protected Position addFaceToPosition(Position a, BlockFace b) {
         return sumOfPositions(a, faceToIdentityPosition(b));
     }
@@ -272,6 +280,9 @@ public class GameClient extends SessionAdapter {
         Socket socket;
         InputStream input;
         OutputStream output;
+        SendPacketsThread sendPacketsThread;
+
+        public volatile boolean running;
 
         public ConnectionThread() {
             super("ConnectionThread-" + session.getRemoteAddress());
@@ -297,6 +308,7 @@ public class GameClient extends SessionAdapter {
                 session.disconnect("Failed to connect server", e);
                 return;
             }
+            running = true;
             input = socket.getInputStream();
             output = socket.getOutputStream();
             if (!handshake()) return;
@@ -308,8 +320,9 @@ public class GameClient extends SessionAdapter {
             session.send(new ServerSetSlotPacket(0, 0, 40, new ItemStack(BlockType.PLANKS.minecraftItemID)));
             session.send(new ServerSetSlotPacket(0, 0, 41, new ItemStack(BlockType.LEAVES.minecraftItemID)));
             manager.connectedClients.put(session, GameClient.this);
-            new SendPacketsThread().start();
-            while (true) {
+            sendPacketsThread = new SendPacketsThread();
+            sendPacketsThread.start();
+            while (running) {
                 Packet p = Packet.readPacket(input);
                 if (p == null) break;
                 else if (p instanceof ChunkPacket) {
@@ -455,7 +468,18 @@ public class GameClient extends SessionAdapter {
         }
 
         protected void shutdown() {
-
+            if (sendPacketsThread != null) {
+                sendPacketsThread.interrupt();
+            }
+            if (socket != null) {
+                try {
+                    socket.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+            loadedColumns.clear();
+            loadedChunks.clear();
         }
 
         protected class SendPacketsThread extends Thread {
@@ -465,11 +489,10 @@ public class GameClient extends SessionAdapter {
 
             public void run() {
                 Packet packet;
-                while (true) {
+                while (running) {
                     try {
                         packet = packetsToSend.takeFirst();
                     } catch (InterruptedException e1) {
-                        e1.printStackTrace();
                         break;
                     }
                     synchronized (output) {

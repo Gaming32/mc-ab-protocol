@@ -12,11 +12,9 @@ import com.github.steveice10.packetlib.event.server.ServerClosingEvent;
 import com.github.steveice10.packetlib.event.server.SessionAddedEvent;
 
 public class ServerManager extends ServerAdapter {
-    // public final GameClientManager manager;
     public final Map<Session, GameClient> connectedClients;
 
     public ServerManager() {
-        // manager = new GameClientManager();
         connectedClients = new Hashtable<>();
     }
 

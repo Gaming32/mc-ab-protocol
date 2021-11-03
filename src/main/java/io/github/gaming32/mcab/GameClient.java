@@ -103,13 +103,9 @@ public class GameClient extends SessionAdapter {
     @Override
     public void packetReceived(PacketReceivedEvent e) {
         MinecraftProtocol proto = (MinecraftProtocol)e.getSession().getPacketProtocol();
-        // System.out.println("SubProtocol: " + proto.getSubProtocol() + "\tPacket: " + e.getPacket());
         if (proto.getSubProtocol() == SubProtocol.LOGIN) {
             if (e.getPacket() instanceof LoginStartPacket) {
                 LoginStartPacket packet = (LoginStartPacket)e.getPacket();
-                // GameProfile profile = proto.getProfile();
-                // username = profile.getName();
-                // uuid = profile.getId();
                 username = packet.getUsername();
                 uuid = UUID.nameUUIDFromBytes(username.getBytes());
                 start();

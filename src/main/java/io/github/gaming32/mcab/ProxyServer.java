@@ -37,12 +37,18 @@ public class ProxyServer extends TcpServer {
     public static final String VERSION_NAME = "a1.3.2";
     public static final int AB_PROTOCOL_VERSION = 4;
     public static final int MC_PROTOCOL_VERSION = 756;
-    protected final ServerManager serverManager;
 
-    public ProxyServer(String host, int port) {
+    public final ServerManager serverManager;
+    public final String destHost;
+    public final int destPort;
+
+    public ProxyServer(String host, int port, String destHost, int destPort) {
         super(host, port, MinecraftProtocol.class);
         SessionService sessionService = new SessionService();
         sessionService.setProxy(Proxy.NO_PROXY);
+
+        this.destHost = destHost;
+        this.destPort = destPort;
 
         this.serverManager = new ServerManager();
 
@@ -185,7 +191,25 @@ public class ProxyServer extends TcpServer {
     }
 
     public static void main(String[] args) {
-        ProxyServer server = new ProxyServer(DEFAULT_HOST, DEFAULT_PORT);
+        SimpleOptionParser optionParser = new SimpleOptionParser(args);
+        if (optionParser.isPresent("help")) {
+            System.out.println("Usage: java -jar mc-ab-protocol.jar [-help] [-bindHost <host>] [-bindPort <port>] [-host <host>] [-port <port>]");
+            System.out.println("");
+            System.out.println("Arguments:");
+            System.out.println("    -help               Shows this help");
+            System.out.println("    -bindHost <host>    Binds to the host host (default: " + DEFAULT_HOST + ")");
+            System.out.println("    -bindPort <port>    Binds to the port port (default: " + DEFAULT_PORT + ")");
+            System.out.println("    -host <host>        Connects to the host host (default: " + DEST_HOST + ")");
+            System.out.println("    -port <port>        Connects to the port port (default: " + DEST_PORT + ")");
+            return;
+        }
+
+        String host = optionParser.getOpt("bindHost", DEFAULT_HOST);
+        int port = optionParser.getOpt("bindPort", Integer.valueOf(DEFAULT_PORT), Integer::valueOf);
+        String destHost = optionParser.getOpt("host", DEST_HOST);
+        int destPort = optionParser.getOpt("port", Integer.valueOf(DEST_PORT), Integer::valueOf);
+
+        ProxyServer server = new ProxyServer(host, port, destHost, destPort);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             server.close();
         }));
